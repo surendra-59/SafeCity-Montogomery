@@ -13,6 +13,7 @@ from datetime import datetime
 import contextlib
 import io
 import auto_pipeline
+import bright_data_weather
 
 # ─────────────────────────────────────────
 # PAGE CONFIG
@@ -207,22 +208,56 @@ with st.sidebar:
     st.markdown("### 🛡️ SafeCity Controls")
     st.markdown("---")
 
-    st.markdown("**Weather Trigger Simulation**")
-    weather_event = st.selectbox("Incoming Event", [
-        "None (baseline)",
-        "Heavy Rain (2in+)",
-        "Severe Thunderstorm",
-        "Flash Flood Watch",
-        "Tropical Storm Warning"
-    ])
+    # ── LIVE WEATHER via Bright Data ────────────────────────
+    st.markdown("**🌦️ Live Weather — Montgomery, AL**")
 
-    weather_multiplier = {
-        "None (baseline)":         1.0,
-        "Heavy Rain (2in+)":       1.3,
-        "Severe Thunderstorm":     1.5,
-        "Flash Flood Watch":       1.7,
-        "Tropical Storm Warning":  2.0,
-    }[weather_event]
+    # Cache weather for 10 minutes to avoid excessive API calls
+    @st.cache_data(ttl=600)
+    def _fetch_weather():
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        return bright_data_weather.get_live_weather()
+
+    live_weather = _fetch_weather()
+
+    if live_weather["success"]:
+        summary = bright_data_weather.get_weather_summary(live_weather)
+        st.success(f"📡 {summary}")
+        st.caption(f"Source: {live_weather['source']} · {live_weather['fetched_at']}")
+        if live_weather["alerts"]:
+            for alert in live_weather["alerts"]:
+                st.warning(f"🚨 {alert}")
+    else:
+        st.warning("⚠️ Live weather unavailable — use manual override below")
+
+    st.markdown("")
+    weather_source = st.radio(
+        "Weather source",
+        ["🛰️ Live", "🎛️ Manual Override"],
+        index=0 if live_weather["success"] else 1,
+        horizontal=True,
+    )
+
+    if weather_source == "🛰️ Live" and live_weather["success"]:
+        weather_event = live_weather["condition"]
+        weather_multiplier = live_weather["risk_multiplier"]
+        weather_is_live = True
+    else:
+        weather_event = st.selectbox("Incoming Event", [
+            "None (baseline)",
+            "Heavy Rain (2in+)",
+            "Severe Thunderstorm",
+            "Flash Flood Watch",
+            "Tropical Storm Warning"
+        ])
+        weather_multiplier = {
+            "None (baseline)":         1.0,
+            "Heavy Rain (2in+)":       1.3,
+            "Severe Thunderstorm":     1.5,
+            "Flash Flood Watch":       1.7,
+            "Tropical Storm Warning":  2.0,
+        }[weather_event]
+        weather_is_live = False
 
     st.markdown("---")
     st.markdown("**Risk Filter**")
@@ -327,11 +362,22 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-if weather_event != "None (baseline)":
+if weather_multiplier > 1.0:
+    _src_label = "🛰️ LIVE" if weather_is_live else "🎛️ Manual simulation"
+    _alert_details = ""
+    if weather_is_live and live_weather.get("temp_f"):
+        _alert_details = f" | {live_weather['temp_f']}°F, Humidity {live_weather.get('humidity', '?')}%"
     st.markdown(f"""
     <div class="alert-banner">
-        <div class="alert-title">⚡ WEATHER TRIGGER ACTIVE</div>
-        <div class="alert-text">{weather_event} detected — risk scores boosted ×{weather_multiplier}. Dispatch alerts updated.</div>
+        <div class="alert-title">⚡ WEATHER TRIGGER ACTIVE — {_src_label}</div>
+        <div class="alert-text">{weather_event}{_alert_details} — risk scores boosted ×{weather_multiplier}. Dispatch alerts updated.</div>
+    </div>
+    """, unsafe_allow_html=True)
+elif weather_is_live and live_weather["success"]:
+    st.markdown(f"""
+    <div style="background: #14532d; border: 1px solid #22c55e; border-radius: 10px; padding: 0.8rem 1.2rem; margin-bottom: 1rem;">
+        <div style="font-family: 'Space Mono', monospace; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.1em; color: #86efac;">🛰️ LIVE WEATHER — BRIGHT DATA</div>
+        <div style="font-size: 0.85rem; color: #bbf7d0; margin-top: 0.2rem;">{weather_event} · No elevated risk detected (×{weather_multiplier})</div>
     </div>
     """, unsafe_allow_html=True)
 

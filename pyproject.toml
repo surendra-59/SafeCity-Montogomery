@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "altair==4.2.2",
+    "beautifulsoup4>=4.14.3",
     "folium>=0.20.0",
     "geopandas>=1.1.2",
     "joblib>=1.5.3",
@@ -19,4 +20,5 @@ dependencies = [
     "shapely>=2.1.2",
     "streamlit>=1.19.0",
     "streamlit-folium>=0.26.2",
+    "urllib3>=2.6.3",
 ]
