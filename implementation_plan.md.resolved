@@ -1,83 +1,82 @@
-# Auto Pipeline — Implementation Plan
+# Context-Aware Dispatch Alerts — Implementation Plan
 
-## Goal
-Build [auto_pipeline.py](file:///c:/Users/Acer/Desktop/Project/Hackathon/auto_pipeline.py): a single Python script that replaces the manual Jupyter
-workflow. It fetches fresh data from the two ArcGIS REST APIs, then runs every step
-of [development.ipynb](file:///c:/Users/Acer/Desktop/Project/Hackathon/development.ipynb) in order, producing the same output files the dashboard expects.
+## Problem
 
----
+The dispatch alerts currently show the **same hardcoded message** for every High-risk zone:
 
-## What I Observed in [development.ipynb](file:///c:/Users/Acer/Desktop/Project/Hackathon/development.ipynb)
+> 🚨 Deploy mosquito/drainage crew
 
-The notebook has **4 code cells**, in this exact order:
+But the project is **not just about mosquitoes**. The 311 dataset contains **30+ request types** across **19 city departments**:
 
-| Cell | What it does | Reads | Writes |
-|------|-------------|-------|--------|
-| **Cell 1** | Clean 311 requests | [311_requests_full.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/311_requests_full.csv) | [311_requests_cleaned.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/311_requests_cleaned.csv) |
-| **Cell 2** | Clean code violations | [montgomery_code_violations_full.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/montgomery_code_violations_full.csv) | [violations_cleaned.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/violations_cleaned.csv) |
-| **Cell 3** | Clean weather sirens | [Weather_Sirens.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/Weather_Sirens.csv) | [sirens_cleaned.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/sirens_cleaned.csv) |
-| **Cell 4** | Feature engineering → feature matrix | `*_cleaned.csv` files | [feature_matrix.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/feature_matrix.csv) |
-| **Cell 5** | Train RF model + score + save | [feature_matrix.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/feature_matrix.csv) | [nuisance_predictor.pkl](file:///c:/Users/Acer/Desktop/Project/Hackathon/nuisance_predictor.pkl), [risk_scores.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/risk_scores.csv), [feature_importance.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/feature_importance.csv), [model_evaluation.png](file:///c:/Users/Acer/Desktop/Project/Hackathon/model_evaluation.png) |
+| Category | Example Request Types | Department |
+|---|---|---|
+| **Nuisance/Environmental** | Nuisance, Ditch Cutting, Clean Inlets, Stagnant Water | Code Enforcement |
+| **Property/Structural** | Open & Vacant (Abandon House), Parking On Front Lawn | Code Enforcement |
+| **Infrastructure** | Pothole Repairing, Sidewalk, Street Light Out, Curb/Gutter | Street Maintenance |
+| **Sanitation** | Missed Pick Up, Bulky Items & Debris, Dead Animal Pickup | Sanitation Dept |
+| **Traffic/Safety** | Traffic Issues for Montgomery PD | Police / Traffic Eng. |
+| **Urban Forestry** | Fallen Trees and Limbs, Tree Trimming | Urban Forestry |
+| **Building/Facilities** | COM Plumbing, COM Electrical, COM HVAC | Building Maintenance |
 
-The auto pipeline will:
-1. **Prepend**: fetch fresh 311 + violations data from APIs → save as `*_full.csv`
-2. **Then run** each of the 5 notebook cells' logic verbatim as Python functions
-
----
+The `risk_scores.csv` already has per-grid-cell metrics we can use:
+- `nuisance_rate` — fraction of complaints that are nuisance-type
+- `open_violation_rate` — fraction of code violations still open
+- `total_nuisance`, `total_complaints`, `open_violations`, `total_violations`
+- `siren_coverage_gap`, `chronic_parcel_rate`
 
 ## Proposed Changes
 
-### [DELETE] [auto_pipeline.py](file:///c:/Users/Acer/Desktop/Project/Hackathon/auto_pipeline.py)
-Delete the version I already wrote (it diverges from the notebook).
+### [MODIFY] [dashboard.py](file:///c:/Users/Acer/Desktop/Project/Hackathon/dashboard.py)
 
----
+**Replace lines 529-534** (the hardcoded dispatch action) with a function that derives a context-aware action from the grid cell's actual data profile:
 
-### [NEW] [auto_pipeline.py](file:///c:/Users/Acer/Desktop/Project/Hackathon/auto_pipeline.py)
+```python
+def get_dispatch_action(row):
+    """Derive a specific dispatch recommendation from the zone's risk profile."""
+    label = str(row["adjusted_label"])
+    if label == "Low":
+        return "✅ Monitor", "low"
+    if label == "Medium":
+        return "⚠️ Schedule inspection", "medium"
 
-The new script will contain 7 sequential functions that mirror the notebook exactly:
+    # --- HIGH risk: pick the best action from the data ---
+    actions = []
+    nr  = row.get("nuisance_rate", 0)
+    ovr = row.get("open_violation_rate", 0)
+    cpr = row.get("chronic_parcel_rate", 0)
+    sg  = row.get("siren_coverage_gap", 0)
 
+    if nr > 0.5:
+        actions.append("🦟 Deploy nuisance abatement crew (drainage/mosquito)")
+    if ovr > 0.3:
+        actions.append("🏚️ Dispatch code enforcement — open violations")
+    if cpr > 0.3:
+        actions.append("📋 Chronic repeat offender — escalate to legal/lien")
+    if sg == 1:
+        actions.append("📡 Siren coverage gap — alert Emergency Management")
+
+    # Fallback: if none of the specific triggers fire
+    if not actions:
+        tc = row.get("total_complaints", 0)
+        tn = row.get("total_nuisance", 0)
+        if tc > 0 and tn / tc < 0.3:
+            actions.append("🔧 Deploy maintenance crew (infrastructure/sanitation)")
+        else:
+            actions.append("🚨 High-risk zone — deploy field inspection team")
+
+    return " · ".join(actions), ""
 ```
-step0_fetch_api()          ← NEW: paginate ArcGIS REST APIs, save *_full.csv
-step1_clean_311()          ← Exact copy of Cell 1 logic
-step2_clean_violations()   ← Exact copy of Cell 2 logic
-step3_clean_sirens()       ← Exact copy of Cell 3 logic
-step4_feature_matrix()     ← Exact copy of Cell 4 logic
-step5_train_and_score()    ← Exact copy of Cell 5 logic
-main()                     ← Calls all steps in order, logs timing
-```
 
-**Key design decisions:**
-- Every function is a verbatim port of the corresponding notebook cell  
-  (same variable names, same column names, same thresholds, same file paths)
-- API fetch uses `resultOffset` pagination (ArcGIS standard), max 2000 rows/page
-- If the API is unreachable, it falls back to the existing `*_full.csv` on disk so the rest of the pipeline still runs
-- Siren data is static (no API) — just re-runs Cell 3 cleaning from [Weather_Sirens.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/Weather_Sirens.csv)
-- All output paths are identical to the notebook ([Dataset/risk_scores.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/risk_scores.csv), etc.)
-- Script can be run at any time to refresh data + retrain
-
----
+> [!IMPORTANT]
+> This means the dispatch card can now show messages like:
+> - *🦟 Deploy nuisance abatement crew · 🏚️ Dispatch code enforcement*
+> - *🔧 Deploy maintenance crew (infrastructure/sanitation)*
+> - *📋 Chronic repeat offender — escalate to legal/lien · 📡 Siren coverage gap*
 
 ## Verification Plan
 
-### Manual run test
-```powershell
-# From the Hackathon folder:
-uv run python auto_pipeline.py
-```
-
-**Expected behaviour (check console output for each line):**
-1. `[HH:MM:SS] STEP 0 — FETCHING LIVE DATA` → rows fetched per page, then total
-2. `[HH:MM:SS] STEP 1 — CLEANING 311` → prints same shape as notebook Cell 1
-3. `[HH:MM:SS] STEP 2 — CLEANING VIOLATIONS` → prints same shape as Cell 2
-4. `[HH:MM:SS] STEP 3 — CLEANING SIRENS` → 74 rows
-5. `[HH:MM:SS] STEP 4 — BUILDING FEATURE MATRIX` → [(1227, 37)](file:///c:/Users/Acer/Desktop/Project/Hackathon/auto_pipeline.py#63-66) (or updated count)
-6. `[HH:MM:SS] STEP 5 — TRAINING` → CV ROC-AUC prints, then summary block
-7. All four output files exist:
-   - [nuisance_predictor.pkl](file:///c:/Users/Acer/Desktop/Project/Hackathon/nuisance_predictor.pkl)
-   - [Dataset/risk_scores.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/risk_scores.csv)
-   - [Dataset/feature_importance.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/feature_importance.csv)
-   - [model_evaluation.png](file:///c:/Users/Acer/Desktop/Project/Hackathon/model_evaluation.png)
-
-### Dashboard still works
-After the pipeline completes, the already-running dashboard at `localhost:8501`
-should reload fine with the new [risk_scores.csv](file:///c:/Users/Acer/Desktop/Project/Hackathon/Dataset/risk_scores.csv) (Streamlit auto-refreshes on file change).
+### Manual Verification
+1. Run `uv run streamlit run dashboard.py`
+2. Check the "Top Dispatch Alerts" panel on the right side
+3. Verify that **different zones now show different, context-specific actions** instead of the same mosquito message
+4. Toggle weather multiplier to confirm Medium/Low labels still show "Schedule inspection" / "Monitor"

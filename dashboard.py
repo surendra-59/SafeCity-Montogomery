@@ -519,19 +519,49 @@ with right_col:
 
     st.markdown('<div class="section-header">Top Dispatch Alerts</div>', unsafe_allow_html=True)
 
-    top_alerts = df[df["alert"] == 1].nlargest(6, "adjusted_score")[
-        ["grid_cell", "adjusted_score", "adjusted_label"]
-    ]
+    top_alerts = df[df["alert"] == 1].nlargest(6, "adjusted_score")
+
+    def get_dispatch_action(row):
+        """Derive a context-aware dispatch recommendation from the zone's risk profile."""
+        label = str(row["adjusted_label"])
+        if label == "Low":
+            return "✅ Monitor", "low"
+        if label == "Medium":
+            return "⚠️ Schedule inspection", "medium"
+
+        # --- HIGH risk: pick the best action(s) from the data ---
+        actions = []
+        nr  = row.get("nuisance_rate", 0) or 0
+        ovr = row.get("open_violation_rate", 0) or 0
+        cpr = row.get("chronic_parcel_rate", 0) or 0
+        sg  = row.get("siren_coverage_gap", 0) or 0
+
+        if nr > 0.5:
+            actions.append("🦟 Nuisance abatement crew (drainage/mosquito)")
+        if ovr > 0.3:
+            actions.append("🏚️ Code enforcement — open violations")
+        if cpr > 0.3:
+            actions.append("📋 Chronic offender — escalate to legal/lien")
+        if sg == 1:
+            actions.append("📡 Siren gap — alert Emergency Mgmt")
+
+        # Fallback: if none of the specific triggers fire
+        if not actions:
+            tc = row.get("total_complaints", 0) or 0
+            tn = row.get("total_nuisance", 0) or 0
+            if tc > 0 and tn / tc < 0.3:
+                actions.append("🔧 Maintenance crew (infrastructure/sanitation)")
+            else:
+                actions.append("🚨 Deploy field inspection team")
+
+        return " · ".join(actions), ""
 
     if len(top_alerts) == 0:
         st.info("No alerts at current threshold.")
     else:
         for _, row in top_alerts.iterrows():
             label   = str(row["adjusted_label"])
-            css_cls = "medium" if label == "Medium" else ("low" if label == "Low" else "")
-            action  = ("🚨 Deploy mosquito/drainage crew" if label == "High"
-                       else "⚠️ Schedule inspection" if label == "Medium"
-                       else "✅ Monitor")
+            action, css_cls = get_dispatch_action(row)
             st.markdown(f"""
             <div class="dispatch-card {css_cls}">
                 <b>Zone {row['grid_cell']}</b><br>
