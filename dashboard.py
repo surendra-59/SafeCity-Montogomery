@@ -592,6 +592,45 @@ with right_col:
                 <small style="color:#94a3b8">{action}</small>
             </div>
             """, unsafe_allow_html=True)
+            
+        # THE MERGE: Your Automated Discord Dispatch Integration
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("📲 Push Dispatch Orders to Discord", use_container_width=True, type="primary"):
+            WEBHOOK_URL = "https://discord.com/api/webhooks/1477852277371834611/duAi9jHBeta_mFeKD197ZPX7Z-aNMG9MjGqvapw6gOQ_o0hMZ0_PBq6B4wRHeK9pCTd0"
+            import requests
+            
+            with st.spinner("Transmitting automated dispatch orders..."):
+                # Send alerts for the top 3 highest risk zones
+                for _, row in top_alerts.head(3).iterrows():
+                    action, _ = get_dispatch_action(row)
+                    prob_score = row['adjusted_score'] * 100
+                    historical_count = int(row.get('total_complaints', 0))
+                    
+                    payload = {
+                        "content": "PROACTIVE CITY ALERT: ENVIRONMENTAL HAZARD PREDICTED",
+                        "embeds": [
+                            {
+                                "title": f"Dispatch Order: Vulnerable Sector {row['grid_cell']}",
+                                "description": f"**Location:** Coordinates {row['cell_lat']}, {row['cell_lon']}\n**Risk Level:** CRITICAL ({prob_score:.1f}% Probability Score)\n**Historical Baseline:** {historical_count} prior incidents.",
+                                "color": 16711680, 
+                                "fields": [
+                                    {
+                                        "name": "Live Environmental Trigger", 
+                                        "value": f"Current conditions via Bright Data: {weather_event} (Risk Multiplier: {weather_multiplier}x)"
+                                    },
+                                    {
+                                        "name": "Recommended Municipal Action", 
+                                        "value": action
+                                    }
+                                ],
+                                "footer": {
+                                    "text": "City of Montgomery - SafeCity AI Command Center"
+                                }
+                            }
+                        ]
+                    }
+                    requests.post(WEBHOOK_URL, json=payload)
+            st.success("SUCCESS: Dispatch alerts successfully delivered to the communication channel!")
 
 # ─────────────────────────────────────────
 # BOTTOM ROW — CHARTS
