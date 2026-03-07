@@ -85,12 +85,14 @@ def scrape_local_news() -> str:
             resp.raise_for_status()
             from bs4 import BeautifulSoup
             soup = BeautifulSoup(resp.text, "html.parser")
-            for tag in soup.find_all(["h1", "h2", "h3", "a"], limit=30):
+            for tag in soup.find_all(["h1", "h2", "h3", "h4", "a"]):
                 text = tag.get_text(strip=True)
-                if 10 < len(text) < 120 and re.search(r"[a-zA-Z]{3,}", text):
+                words = text.split()
+                if 25 < len(text) < 150 and len(words) >= 5 and re.search(r"[a-zA-Z]{3,}", text):
                     keywords = ["montgomery", "weather", "flood", "storm",
                                 "fire", "police", "crime", "road", "water",
-                                "emergency", "alert", "city", "county"]
+                                "emergency", "alert", "city", "county",
+                                "shoot", "kill", "arrest", "crash", "danger"]
                     if any(kw in text.lower() for kw in keywords):
                         headlines.append(text)
         except Exception:

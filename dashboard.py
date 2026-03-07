@@ -498,8 +498,9 @@ with map_col:
                 popup=folium.Popup(
                     f"<b>Risk: {row['adjusted_label']}</b><br>"
                     f"Score: {row['adjusted_score']:.3f}<br>"
-                    f"Cell: {row['grid_cell']}",
-                    max_width=200
+                    f"Cell: {row['grid_cell']}<br>"
+                    f"<a href='https://www.google.com/maps?q={row['cell_lat']},{row['cell_lon']}' target='_blank'>View on Google Maps</a>",
+                    max_width=250
                 )
             ).add_to(m)
 
@@ -588,10 +589,15 @@ with right_col:
         for _, row in top_alerts.iterrows():
             label   = str(row["adjusted_label"])
             action, css_cls = get_dispatch_action(row)
+            lat = row['cell_lat']
+            lon = row['cell_lon']
+            maps_url = f"https://www.google.com/maps?q={lat},{lon}"
+            
             st.markdown(f"""
             <div class="dispatch-card {css_cls}">
                 <b>Zone {row['grid_cell']}</b><br>
                 Score: <b>{row['adjusted_score']:.3f}</b> &nbsp;|&nbsp; {label}<br>
+                📍 <a href="{maps_url}" target="_blank" style="color:#3b82f6; text-decoration:none;">View on Google Maps</a><br>
                 <small style="color:#94a3b8">{action}</small>
             </div>
             """, unsafe_allow_html=True)
@@ -599,7 +605,7 @@ with right_col:
         # THE MERGE: Your Automated Discord Dispatch Integration
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("📲 Push Dispatch Orders to Discord", use_container_width=True, type="primary"):
-            WEBHOOK_URL = "https://discord.com/api/webhooks/1477852277371834611/duAi9jHBeta_mFeKD197ZPX7Z-aNMG9MjGqvapw6gOQ_o0hMZ0_PBq6B4wRHeK9pCTd0"
+            WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
             import requests
             
             with st.spinner("Transmitting automated dispatch orders..."):
