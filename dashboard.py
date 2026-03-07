@@ -625,7 +625,7 @@ with right_col:
                                 "fields": [
                                     {
                                         "name": "Live Environmental Trigger", 
-                                        "value": f"Current conditions via Bright Data: {weather_event} (Risk Multiplier: {weather_multiplier}x)"
+                                        "value": f"Current conditions: {weather_event} (Risk Multiplier: {weather_multiplier}x)"
                                     },
                                     {
                                         "name": "Recommended Municipal Action", 
