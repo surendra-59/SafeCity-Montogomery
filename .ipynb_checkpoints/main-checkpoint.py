@@ -410,7 +410,7 @@ with right_col:
             showarrow=False
         )]
     )
-    st.plotly_chart(fig_donut, use_container_width=True)
+    st.plotly_chart(fig_donut, width="stretch")
 
     # Top dispatch alerts
     st.markdown('<div class="section-header">Top Dispatch Alerts</div>', unsafe_allow_html=True)
@@ -458,7 +458,7 @@ with b1:
     )
     fig_hist.update_xaxes(gridcolor="#1e293b")
     fig_hist.update_yaxes(gridcolor="#1e293b")
-    st.plotly_chart(fig_hist, use_container_width=True)
+    st.plotly_chart(fig_hist, width="stretch")
 
 with b2:
     st.markdown('<div class="section-header">Top 10 Feature Importances</div>', unsafe_allow_html=True)
@@ -477,7 +477,7 @@ with b2:
         )
         fig_imp.update_xaxes(gridcolor="#1e293b")
         fig_imp.update_yaxes(gridcolor="#1e293b", tickfont=dict(size=10))
-        st.plotly_chart(fig_imp, use_container_width=True)
+        st.plotly_chart(fig_imp, width="stretch")
     else:
         st.info("feature_importance.csv not found.")
 
@@ -500,7 +500,7 @@ with b3:
     )
     fig_bar.update_xaxes(gridcolor="#1e293b")
     fig_bar.update_yaxes(gridcolor="#1e293b")
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.plotly_chart(fig_bar, width="stretch")
 
 # ─────────────────────────────────────────
 # DATA TABLE
@@ -510,7 +510,7 @@ with st.expander("📋 View Raw Risk Scores Table"):
     show_cols = [c for c in show_cols if c in df.columns]
     st.dataframe(
         df[show_cols].sort_values("adjusted_score", ascending=False),
-        use_container_width=True,
+        width="stretch",
         height=300
     )
     csv = df[show_cols].to_csv(index=False).encode("utf-8")
