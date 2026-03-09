@@ -283,7 +283,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("**Map Style**")
-    map_type = st.radio("View", ["Heatmap", "Markers"], index=0)
+    map_type = st.radio("View", ["Heatmap", "Markers"], index=1)
 
     st.markdown("---")
     st.markdown("### 🔄 Model Maintenance")
